@@ -100,8 +100,11 @@ cargo build --release && scripts/test-headless.sh /tmp/rwg-test
 
 It starts a throwaway `gnome-shell --headless` with two virtual 1280×720
 monitors, its own D-Bus session and its own XDG dirs, enables the extension
-plus the probe, and runs four stages: `initial`, `fullscreen`, `restored`,
-`mirrored`. Check all of the following:
+plus the probe, and runs these stages: `initial`, `fullscreen`, `restored`,
+`mirrored`, a workspace switch there and back (`workspace-1`, `workspace-0`,
+each also captured mid-animation as `*-mid`), and `overview`. It ends by
+printing `PASS`/`FAIL` for one automatic check: every wallpaper window covers
+its whole monitor. Check all of the following:
 
 1. `/tmp/rwg-test/probe/*.json`: each player window is `type: DESKTOP`, has
    `skipTaskbar: true` and `onAllWorkspaces: true`, its `rect` matches its

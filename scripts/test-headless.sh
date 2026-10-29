@@ -4,7 +4,8 @@
 # gets its own D-Bus session, config/data dirs and Wayland socket.
 #
 # Usage: scripts/test-headless.sh [WORK_DIR]
-# Produces WORK_DIR/probe/{initial,fullscreen,restored,mirrored}.{png,json}
+# Produces WORK_DIR/probe/{initial,fullscreen,restored,mirrored,workspace-1-mid,
+# workspace-1,workspace-0-mid,workspace-0,overview}.{png,json}
 # and WORK_DIR/shell.log (shell, extension and player output).
 set -euo pipefail
 
@@ -99,3 +100,44 @@ snap restored
 write_config left.mp4
 sleep 3
 snap mirrored
+
+# A normal window, so the workspace has something to slide away.
+gjs -c '
+imports.gi.versions.Gtk = "4.0";
+const {Gtk, GLib} = imports.gi;
+Gtk.init();
+new Gtk.Window({title: "normal-test", default_width: 500, default_height: 300}).present();
+new GLib.MainLoop(null, false).run();
+' &
+normal_app=$!
+sleep 2
+touch "$RWG_PROBE_DIR/request-workspace-1"
+sleep 3
+touch "$RWG_PROBE_DIR/request-workspace-0"
+sleep 3
+kill $normal_app
+touch "$RWG_PROBE_DIR/request-overview"
+sleep 3
+for name in workspace-1-mid workspace-1 workspace-0-mid workspace-0 overview; do
+    [ -s "$RWG_PROBE_DIR/$name.png" ] && echo "captured $name" || echo "missing $name" >&2
+done
+
+# Every wallpaper window must cover its whole monitor once things have settled.
+python3 - "$RWG_PROBE_DIR" <<'PY'
+import json, pathlib, sys
+failed = False
+for path in sorted(pathlib.Path(sys.argv[1]).glob("*.json")):
+    if path.stem.endswith("-mid"):
+        continue
+    state = json.loads(path.read_text())
+    for window in state["windows"]:
+        if not window["title"].startswith("rusty-wallpaper@"):
+            continue
+        m = state["monitors"][window["monitor"]]
+        expected = [m["x"], m["y"], m["width"], m["height"]]
+        if window["rect"] != expected:
+            print(f"FAIL {path.stem}: {window['title']} is {window['rect']}, monitor is {expected}")
+            failed = True
+print("FAIL: geometry" if failed else "PASS: every wallpaper window covers its monitor")
+sys.exit(failed)
+PY

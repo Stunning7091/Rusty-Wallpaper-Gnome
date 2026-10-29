@@ -35,6 +35,9 @@ pub struct Desktop {
 struct Output {
     window: gtk::Window,
     wallpaper: Wallpaper,
+    monitor: gdk::Monitor,
+    /// Follows resolution changes; see `fit_to_monitor`.
+    geometry_handler: Option<glib::SignalHandlerId>,
 }
 
 impl Desktop {
@@ -100,6 +103,9 @@ impl Desktop {
                 wallpaper.file == output.wallpaper.file && wallpaper.fit == output.wallpaper.fit
             });
             if !keep {
+                if let Some(handler) = output.geometry_handler.take() {
+                    output.monitor.disconnect(handler);
+                }
                 output.window.destroy();
             }
             keep
@@ -120,7 +126,23 @@ impl Desktop {
                 wallpaper.fit,
                 self.options.windowed,
             );
-            self.outputs.insert(connector, Output { window, wallpaper });
+            let geometry_handler = (!self.options.windowed).then(|| {
+                let window = window.downgrade();
+                monitor.connect_geometry_notify(move |monitor| {
+                    if let Some(window) = window.upgrade() {
+                        fit_to_monitor(&window, monitor);
+                    }
+                })
+            });
+            self.outputs.insert(
+                connector,
+                Output {
+                    window,
+                    wallpaper,
+                    monitor,
+                    geometry_handler,
+                },
+            );
         }
 
         // Stop decoding files no monitor shows any more.
@@ -218,9 +240,8 @@ fn build_window(
     if windowed {
         window.set_default_size(960, 540);
     } else {
-        let geometry = monitor.geometry();
         window.set_decorated(false);
-        window.set_default_size(geometry.width(), geometry.height());
+        fit_to_monitor(&window, monitor);
         // Clicks pass straight through to the desktop below.
         window.connect_realize(|window| {
             if let Some(surface) = window.surface() {
@@ -236,6 +257,14 @@ fn build_window(
 
     window.present();
     window
+}
+
+/// GTK clamps a window's default size to the work area (the monitor minus the
+/// top bar), which leaves a strip of static wallpaper. It never goes below the
+/// minimum size, so that is what pins the window to the full monitor.
+fn fit_to_monitor(window: &gtk::Window, monitor: &gdk::Monitor) {
+    let geometry = monitor.geometry();
+    window.set_size_request(geometry.width(), geometry.height());
 }
 
 pub fn print_monitors() {

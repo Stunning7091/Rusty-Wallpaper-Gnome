@@ -28,9 +28,11 @@ export default class ProbeExtension extends Extension {
     }
 
     _tick() {
-        // GNOME opens the overview at login; the wallpaper is only visible outside it.
-        if (Main.overview.visible && !Main.overview.animationInProgress)
+        // GNOME opens the overview at login; close it once so the desktop is visible.
+        if (!this._closedLoginOverview && Main.overview.visible && !Main.overview.animationInProgress) {
             Main.overview.hide();
+            this._closedLoginOverview = true;
+        }
         if (!this._dir)
             return;
 
@@ -40,8 +42,37 @@ export default class ProbeExtension extends Extension {
             if (!fileName.startsWith('request-'))
                 continue;
             GLib.unlink(GLib.build_filenamev([this._dir, fileName]));
-            this._capture(fileName.slice('request-'.length));
+            const name = fileName.slice('request-'.length);
+            const workspace = name.match(/^workspace-(\d+)$/);
+            if (workspace)
+                this._switchWorkspace(name, Number(workspace[1]));
+            else if (name === 'overview')
+                this._captureOverview();
+            else
+                this._capture(name);
         }
+    }
+
+    // Captures once mid-animation and once after it has settled.
+    _switchWorkspace(name, index) {
+        global.workspace_manager.get_workspace_by_index(index).activate(global.get_current_time());
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
+            this._capture(`${name}-mid`);
+            return GLib.SOURCE_REMOVE;
+        });
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2000, () => {
+            this._capture(name);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _captureOverview() {
+        Main.overview.show();
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            this._capture('overview');
+            Main.overview.hide();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _capture(name) {
@@ -51,6 +82,8 @@ export default class ProbeExtension extends Extension {
                 index: m.index, x: m.x, y: m.y, width: m.width, height: m.height, inFullscreen: m.inFullscreen,
             })),
             focus: global.display.focus_window?.get_title() ?? null,
+            activeWorkspace: global.workspace_manager.get_active_workspace_index(),
+            workspaces: global.workspace_manager.get_n_workspaces(),
             tabList: global.display.get_tab_list(Meta.TabList.NORMAL, null).map(w => w.get_title()),
             windows: global.get_window_actors().map(actor => {
                 const window = actor.meta_window;
@@ -63,6 +96,8 @@ export default class ProbeExtension extends Extension {
                     onAllWorkspaces: window.is_on_all_workspaces(),
                     skipTaskbar: window.is_skip_taskbar(),
                     fullscreen: window.is_fullscreen(),
+                    actorVisible: actor.visible,
+                    workspace: window.get_workspace()?.index() ?? null,
                 };
             }),
         };
