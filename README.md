@@ -71,6 +71,10 @@ up new extensions after you log out and back in. After that:
 gnome-extensions enable rusty-wallpaper@stunning7091.github.io
 ```
 
+**Updating:** `git pull && ./install.sh`. The player restarts right away. If
+the update changed the extension (`extension/`), log out and back in once,
+because GNOME keeps already loaded extension code until then.
+
 ## Configure
 
 ```toml
@@ -108,9 +112,13 @@ cleanly.
 cargo build --release && scripts/test-headless.sh /tmp/rwg-test
 ```
 
-This starts a throwaway headless GNOME Shell with two virtual monitors, then
-checks placement, fullscreen pause and mirroring. It saves screenshots and
-window state to `/tmp/rwg-test/probe/` and the logs to `/tmp/rwg-test/shell.log`.
+This starts a throwaway headless GNOME Shell with two virtual monitors and goes
+through: placement, fullscreen pause, mirroring, a workspace switch, the
+overview, and turning the extension off and on again. It prints `PASS`/`FAIL`
+for the automatic checks: every wallpaper window covers its whole monitor, the
+overview shows the video, and disabling the extension leaves nothing behind.
+Screenshots and window state go to `/tmp/rwg-test/probe/`, the logs to
+`/tmp/rwg-test/shell.log`.
 
 ## Troubleshooting
 
