@@ -1,0 +1,6 @@
+{
+  "uuid": "probe@rusty-wallpaper.test",
+  "name": "Rusty Wallpaper test probe",
+  "description": "Used only by scripts/test-headless.sh.",
+  "shell-version": ["48"]
+}

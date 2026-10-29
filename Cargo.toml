@@ -1,0 +1,19 @@
+[package]
+name = "rusty-wallpaper"
+version = "0.1.0"
+edition = "2024"
+description = "Looping video wallpapers for GNOME on Wayland"
+license = "MIT"
+repository = "https://github.com/Stunning7091/Rusty-Wallpaper-Gnome"
+
+[dependencies]
+gtk = { package = "gtk4", version = "0.11", features = ["v4_18"] }
+gst = { package = "gstreamer", version = "0.25" }
+gst-plugin-gtk4 = { version = "0.15", features = ["wayland", "dmabuf", "gtk_v4_18"] }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+async-channel = "2"
+
+[profile.release]
+lto = "thin"
+strip = true

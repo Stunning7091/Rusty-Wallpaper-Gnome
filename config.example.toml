@@ -1,0 +1,23 @@
+# Copy to ~/.config/rusty-wallpaper/config.toml.
+# Changes are picked up as soon as you save; no restart needed.
+#
+# Monitors are keyed by connector name. List yours with:
+#   rusty-wallpaper --list-monitors
+
+# Optional: used for any monitor without its own entry below.
+# [default]
+# file = "~/Videos/wallpapers/default.mp4"
+
+[monitor.HDMI-1]
+file = "~/Videos/wallpapers/ocean.mp4"
+fit = "cover"       # cover (crop to fill, default) | contain (letterbox) | fill (stretch)
+
+[monitor.HDMI-2]
+file = "~/Videos/wallpapers/forest.mp4"
+# Point both monitors at the same file to mirror it; it is then decoded only once.
+
+[pause]
+fullscreen = true   # pause a monitor's loop while a fullscreen app covers it
+
+# Use the GPU's VA-API video decoder when available (read at startup).
+# hardware_decoding = true

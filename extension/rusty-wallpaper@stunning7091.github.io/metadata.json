@@ -1,0 +1,7 @@
+{
+  "uuid": "rusty-wallpaper@stunning7091.github.io",
+  "name": "Rusty Wallpaper",
+  "description": "Looping video wallpapers, one per monitor, played by the rusty-wallpaper program.",
+  "shell-version": ["48"],
+  "url": "https://github.com/Stunning7091/Rusty-Wallpaper-Gnome"
+}
