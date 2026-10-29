@@ -112,7 +112,7 @@ window state to `/tmp/rwg-test/probe/` and the logs to `/tmp/rwg-test/shell.log`
 ## Troubleshooting
 
 ```sh
-journalctl --user -f -o cat /usr/bin/gnome-shell   # extension + player messages
+journalctl --user -f -o cat | grep -i rusty         # extension + player messages
 GST_DEBUG=2 rusty-wallpaper --windowed             # GStreamer warnings
 gst-inspect-1.0 va                                 # are VA-API decoders available?
 ```
