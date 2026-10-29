@@ -59,6 +59,13 @@ project therefore has two parts that only work together:
 - **Video only.** `playbin` runs with `flags = "video"`; audio is never decoded.
 - **Click-through.** Player windows clear their input region on every surface
   layout; the extension also drops focus if a player window ever gets it.
+- **Overview via clones.** The overview draws its own static backgrounds
+  (`WorkspaceBackground` in GNOME's `workspace.js`). The extension patches its
+  `_init` with `InjectionManager` and adds a `BackgroundClone` of the player
+  window for that monitor. The clone must report a preferred size of 0;
+  otherwise the overview lays the workspace out wider and stretches it. This
+  relies on GNOME internals (`_bin`, `_monitorIndex`): re-check it on every
+  new Shell version.
 - **Config is the only settings surface.** No GSettings schema, no prefs UI,
   unless someone asks for one. The config reloads live on save.
 
@@ -102,14 +109,19 @@ It starts a throwaway `gnome-shell --headless` with two virtual 1280×720
 monitors, its own D-Bus session and its own XDG dirs, enables the extension
 plus the probe, and runs these stages: `initial`, `fullscreen`, `restored`,
 `mirrored`, a workspace switch there and back (`workspace-1`, `workspace-0`,
-each also captured mid-animation as `*-mid`), and `overview`. It ends by
-printing `PASS`/`FAIL` for one automatic check: every wallpaper window covers
-its whole monitor. Check all of the following:
+each also captured mid-animation as `*-mid`), `overview`, then `disabled`
+and `reenabled` (extension turned off and on again). It ends by
+printing `PASS`/`FAIL` for three automatic checks: every wallpaper window
+covers its whole monitor; disabling the extension removes every window and
+clone, and re-enabling brings them back; every overview background shows a
+video clone. Check all of the following:
 
 1. `/tmp/rwg-test/probe/*.json`: each player window is `type: DESKTOP`, has
    `skipTaskbar: true` and `onAllWorkspaces: true`, its `rect` matches its
    monitor, and it never appears as `focus` or in `tabList`.
-2. `/tmp/rwg-test/probe/*.png`: look at the screenshots. Each monitor shows
+2. `/tmp/rwg-test/probe/*.png`: look at the screenshots; in `overview.png`
+   the previews must have GNOME's normal size, with the next workspace peeking
+   in at the edge. Each monitor shows
    its own video; `contain` letterboxes; `mirrored` shows the same frame twice.
 3. `/tmp/rwg-test/shell.log`: `decoding with vah264dec` (hardware decode), and
    `Paused` then `Playing` around the fullscreen stage. There are no `JS ERROR`

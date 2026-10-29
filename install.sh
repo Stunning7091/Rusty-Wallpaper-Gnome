@@ -21,7 +21,8 @@ fi
 if gnome-extensions info "$UUID" >/dev/null 2>&1; then
     # Already known to the shell: restart it so the new player is used.
     gnome-extensions disable "$UUID" && gnome-extensions enable "$UUID"
-    echo "Updated and restarted."
+    echo "Updated and restarted the player."
+    echo "GNOME keeps the old extension code until you log out and back in."
 else
     echo "Installed. Log out and back in once, then run:"
     echo "  gnome-extensions enable $UUID"

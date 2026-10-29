@@ -4,15 +4,32 @@
 // request-<name> appears in $RWG_PROBE_DIR it writes <name>.json (monitor and
 // window state) and <name>.png (a screenshot of the whole stage).
 
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {WorkspaceBackground} from 'resource:///org/gnome/shell/ui/workspace.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const typeName = type => Object.keys(Meta.WindowType).find(key => Meta.WindowType[key] === type);
+
+function findWorkspaceBackgrounds(actor) {
+    if (actor instanceof WorkspaceBackground)
+        return [actor];
+    return actor.get_children().flatMap(findWorkspaceBackgrounds);
+}
+
+// Overview backgrounds per monitor, and how many of them show a window clone.
+function overviewBackgrounds() {
+    const backgrounds = findWorkspaceBackgrounds(Main.layoutManager.overviewGroup);
+    return backgrounds.map(background => ({
+        monitor: background._monitorIndex,
+        videoClone: background._bin.get_children().some(child => child instanceof Clutter.Clone && child.source),
+    }));
+}
 
 export default class ProbeExtension extends Extension {
     enable() {
@@ -78,6 +95,7 @@ export default class ProbeExtension extends Extension {
     _capture(name) {
         const state = {
             overviewVisible: Main.overview.visible,
+            overviewBackgrounds: overviewBackgrounds(),
             monitors: Main.layoutManager.monitors.map(m => ({
                 index: m.index, x: m.x, y: m.y, width: m.width, height: m.height, inFullscreen: m.inFullscreen,
             })),

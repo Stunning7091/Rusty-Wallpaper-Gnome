@@ -5,7 +5,7 @@
 #
 # Usage: scripts/test-headless.sh [WORK_DIR]
 # Produces WORK_DIR/probe/{initial,fullscreen,restored,mirrored,workspace-1-mid,
-# workspace-1,workspace-0-mid,workspace-0,overview}.{png,json}
+# workspace-1,workspace-0-mid,workspace-0,overview,disabled,reenabled}.{png,json}
 # and WORK_DIR/shell.log (shell, extension and player output).
 set -euo pipefail
 
@@ -118,6 +118,14 @@ sleep 3
 kill $normal_app
 touch "$RWG_PROBE_DIR/request-overview"
 sleep 3
+# Disabling must remove every window and clone; re-enabling must bring them back.
+gnome-extensions disable "$uuid"
+sleep 2
+snap disabled
+gnome-extensions enable "$uuid"
+sleep 4
+snap reenabled
+
 for name in workspace-1-mid workspace-1 workspace-0-mid workspace-0 overview; do
     [ -s "$RWG_PROBE_DIR/$name.png" ] && echo "captured $name" || echo "missing $name" >&2
 done
@@ -139,5 +147,31 @@ for path in sorted(pathlib.Path(sys.argv[1]).glob("*.json")):
             print(f"FAIL {path.stem}: {window['title']} is {window['rect']}, monitor is {expected}")
             failed = True
 print("FAIL: geometry" if failed else "PASS: every wallpaper window covers its monitor")
+
+def load(name):
+    return json.loads((pathlib.Path(sys.argv[1]) / f"{name}.json").read_text())
+
+def wallpaper_windows(state):
+    return [w for w in state["windows"] if w["title"].startswith("rusty-wallpaper@")]
+
+disabled = load("disabled")
+if wallpaper_windows(disabled) or any(b["videoClone"] for b in disabled["overviewBackgrounds"]):
+    print("FAIL: windows or clones left behind after disabling the extension")
+    failed = True
+elif len(wallpaper_windows(load("reenabled"))) != len(disabled["monitors"]):
+    print("FAIL: re-enabling did not bring the wallpaper windows back")
+    failed = True
+else:
+    print("PASS: disable cleans up, re-enable restores")
+
+overview = load("overview")
+backgrounds = overview["overviewBackgrounds"]
+monitors_with_video = {b["monitor"] for b in backgrounds if b["videoClone"]}
+if overview["overviewVisible"] and backgrounds and all(b["videoClone"] for b in backgrounds) \
+        and len(monitors_with_video) == len(overview["monitors"]):
+    print(f"PASS: overview shows the video on {len(backgrounds)} workspace backgrounds")
+else:
+    print(f"FAIL: overview backgrounds {backgrounds}")
+    failed = True
 sys.exit(failed)
 PY

@@ -31,6 +31,9 @@ GNOME Shell ── extension ──spawns──▶ rusty-wallpaper --managed
 - Videos loop with non-flushing segment seeks, so there's no gap or black frame
   at the seam.
 - If two monitors use the same file, it is decoded once and shown in both windows.
+- The overview (Super key) draws its own static wallpaper previews. The
+  extension puts live clones of the video windows on top of them, so the video
+  keeps playing there too.
 - A monitor's video pauses while a fullscreen window covers it.
 - The config file is watched and reloads as soon as you save it. Monitor
   hotplug is handled too.
@@ -119,8 +122,8 @@ gst-inspect-1.0 va                                 # are VA-API decoders availab
 
 ## Known limitations
 
-- The overview (Super key) shows your normal static wallpaper behind the window
-  previews, not the video.
+- In the overview (Super key) the video previews have square corners, where
+  GNOME's own wallpaper previews are rounded.
 - GNOME changes its extension APIs between releases, so other Shell versions
   will need testing before they're added to `metadata.json`.
 

@@ -2,14 +2,18 @@
 //
 // Starts the rusty-wallpaper player as a privileged Wayland client and turns
 // its windows into desktop windows: below everything, on every workspace, out
-// of Alt+Tab and the overview, and never focused.
+// of Alt+Tab and the overview, and never focused. The overview draws its own
+// static backgrounds, so it gets clones of those windows on top of them.
 
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {WorkspaceBackground} from 'resource:///org/gnome/shell/ui/workspace.js';
+import {Extension, InjectionManager} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 // Must match TITLE_PREFIX in src/desktop.rs.
 const TITLE_PREFIX = 'rusty-wallpaper@';
@@ -20,10 +24,26 @@ const RESTART_DELAY_MS = 2000;
 const MAX_QUICK_CRASHES = 5;
 const QUICK_CRASH_US = 10 * GLib.USEC_PER_SEC;
 
+// Fills the space the overview gives the background but never asks for any:
+// a plain clone requests the full window size and makes the overview lay the
+// workspace out wider than GNOME intends, stretching it.
+const BackgroundClone = GObject.registerClass(
+class BackgroundClone extends Clutter.Clone {
+    vfunc_get_preferred_width(_forHeight) {
+        return [0, 0];
+    }
+
+    vfunc_get_preferred_height(_forWidth) {
+        return [0, 0];
+    }
+});
+
 export default class RustyWallpaperExtension extends Extension {
     enable() {
-        // Meta.Window -> {connector, signalIds}
+        // Meta.Window -> {connector, monitorIndex, signalIds}
         this._windows = new Map();
+        // overview WorkspaceBackground -> Clutter.Clone of that monitor's player window
+        this._overviewClones = new Map();
         // connector -> last fullscreen state sent to the player
         this._fullscreen = new Map();
         this._quickCrashes = 0;
@@ -36,10 +56,29 @@ export default class RustyWallpaperExtension extends Extension {
         ];
         this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => this._placeAll());
 
+        this._injectionManager = new InjectionManager();
+        const extension = this;
+        this._injectionManager.overrideMethod(WorkspaceBackground.prototype, '_init', originalInit => {
+            return function (...args) {
+                originalInit.call(this, ...args);
+                extension._addOverviewClone(this);
+            };
+        });
+        // Some workspace backgrounds already exist before the extension is enabled.
+        for (const background of findWorkspaceBackgrounds(Main.layoutManager.overviewGroup))
+            this._addOverviewClone(background);
+
         this._launch();
     }
 
     disable() {
+        this._injectionManager.clear();
+        for (const [background, clone] of this._overviewClones) {
+            background.disconnectObject(this);
+            clone.destroy();
+        }
+        this._overviewClones = null;
+
         for (const id of this._displaySignalIds)
             global.display.disconnect(id);
         Main.layoutManager.disconnect(this._monitorsChangedId);
@@ -108,6 +147,7 @@ export default class RustyWallpaperExtension extends Extension {
         this._client = null;
         this._stdin = null;
         this._windows.clear();
+        this._updateOverviewClones();
 
         const status = process.get_if_exited()
             ? `exit status ${process.get_exit_status()}`
@@ -133,12 +173,12 @@ export default class RustyWallpaperExtension extends Extension {
             return;
 
         this._client.make_desktop(window);
-        const record = {connector: null, signalIds: []};
+        const record = {connector: null, monitorIndex: -1, signalIds: []};
         record.signalIds = [
             // On Wayland the title can arrive after the window is created.
             window.connect('notify::title', () => this._place(window)),
             window.connect('shown', () => this._place(window)),
-            window.connect('unmanaged', () => this._windows?.delete(window)),
+            window.connect('unmanaged', () => this._forgetWindow(window)),
         ];
         this._windows.set(window, record);
         this._place(window);
@@ -152,6 +192,8 @@ export default class RustyWallpaperExtension extends Extension {
 
         record.connector = title.slice(TITLE_PREFIX.length);
         const index = global.backend.get_monitor_manager().get_monitor_for_connector(record.connector);
+        record.monitorIndex = index;
+        this._updateOverviewClones();
         if (index < 0)
             return;
 
@@ -165,6 +207,34 @@ export default class RustyWallpaperExtension extends Extension {
     _placeAll() {
         for (const window of this._windows.keys())
             this._place(window);
+    }
+
+    _forgetWindow(window) {
+        if (!this._windows?.delete(window))
+            return;
+        this._updateOverviewClones();
+    }
+
+    _addOverviewClone(background) {
+        // Above GNOME's static background, below the window previews.
+        const clone = new BackgroundClone({x_expand: true, y_expand: true});
+        background._bin.add_child(clone);
+        this._overviewClones.set(background, clone);
+        background.connectObject('destroy', () => this._overviewClones?.delete(background), this);
+        clone.source = this._actorForMonitor(background._monitorIndex);
+    }
+
+    _updateOverviewClones() {
+        for (const [background, clone] of this._overviewClones)
+            clone.source = this._actorForMonitor(background._monitorIndex);
+    }
+
+    _actorForMonitor(index) {
+        for (const [window, record] of this._windows) {
+            if (record.monitorIndex === index)
+                return window.get_compositor_private();
+        }
+        return null;
     }
 
     _syncFullscreen() {
@@ -194,4 +264,10 @@ export default class RustyWallpaperExtension extends Extension {
             console.warn(`${this.uuid}: cannot talk to the player: ${e.message}`);
         }
     }
+}
+
+function findWorkspaceBackgrounds(actor) {
+    if (actor instanceof WorkspaceBackground)
+        return [actor];
+    return actor.get_children().flatMap(findWorkspaceBackgrounds);
 }
